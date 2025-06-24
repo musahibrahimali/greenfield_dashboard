@@ -12,10 +12,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import type { Farmer } from '@/lib/types';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
 
-export const columns: ColumnDef<Farmer>[] = [
+export const getColumns = ({ onEdit }: { onEdit: (farmer: Farmer) => void }): ColumnDef<Farmer>[] => [
   {
     id: 'select',
     header: ({ table }) => (
@@ -66,11 +66,21 @@ export const columns: ColumnDef<Farmer>[] = [
     cell: ({ row }) => row.getValue('region') || 'N/A',
   },
   {
-    accessorKey: 'joinDate',
-    header: 'Join Date',
+    accessorKey: 'updatedAt',
+    header: ({ column }) => {
+       return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Last Updated
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
     cell: ({ row }) => {
-      const joinDate = row.getValue('joinDate') as string | undefined;
-      return joinDate ? format(new Date(joinDate), 'PPP') : 'N/A';
+      const updatedAt = row.getValue('updatedAt') as string;
+      return <div>{formatDistanceToNow(new Date(updatedAt), { addSuffix: true })}</div>
     },
   },
   {
@@ -83,6 +93,9 @@ export const columns: ColumnDef<Farmer>[] = [
           {status || 'Unknown'}
         </Badge>
       );
+    },
+    filterFn: (row, id, value) => {
+      return value.includes(row.getValue(id))
     },
   },
   {
@@ -112,7 +125,7 @@ export const columns: ColumnDef<Farmer>[] = [
             >
               Copy Farmer ID
             </DropdownMenuItem>
-            <DropdownMenuItem>Edit Farmer</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onEdit(farmer)}>Edit Farmer</DropdownMenuItem>
             <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">Delete Farmer</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

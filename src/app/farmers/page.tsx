@@ -6,11 +6,12 @@ import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Download, PlusCircle, Upload } from 'lucide-react';
 import { FarmerDataTable } from '@/components/farmers/farmer-data-table';
-import { columns } from '@/components/farmers/farmer-columns';
+import { getColumns } from '@/components/farmers/farmer-columns';
 import { mockFarmers } from '@/lib/mock-data';
 import type { Farmer } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { UploadReportDialog } from '@/components/farmers/upload-report-dialog';
+import { AddEditFarmerDialog, type FarmerFormValues } from '@/components/farmers/add-edit-farmer-dialog';
 
 type FailedRecord = {
   rowIndex: number;
@@ -20,16 +21,61 @@ type FailedRecord = {
 
 export default function FarmersPage() {
   const { toast } = useToast();
-  const [farmers, setFarmers] = React.useState<Farmer[]>(mockFarmers);
+  const [farmers, setFarmers] = React.useState<Farmer[]>(() => 
+    mockFarmers.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  );
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [isReportOpen, setIsReportOpen] = React.useState(false);
   const [failedRecords, setFailedRecords] = React.useState<FailedRecord[]>([]);
+
+  const [isAddEditDialogOpen, setIsAddEditDialogOpen] = React.useState(false);
+  const [editingFarmer, setEditingFarmer] = React.useState<Farmer | null>(null);
+
+  const handleOpenAddDialog = () => {
+    setEditingFarmer(null);
+    setIsAddEditDialogOpen(true);
+  };
   
+  const handleOpenEditDialog = (farmer: Farmer) => {
+    setEditingFarmer(farmer);
+    setIsAddEditDialogOpen(true);
+  };
+  
+  const handleSaveFarmer = (data: FarmerFormValues) => {
+    const now = new Date().toISOString();
+    
+    if (editingFarmer) {
+      // Edit mode
+      const updatedFarmers = farmers.map(f => 
+        f.id === editingFarmer.id 
+          ? { ...f, ...data, joinDate: data.joinDate?.toISOString(), updatedAt: now } 
+          : f
+      );
+      setFarmers(updatedFarmers.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
+      toast({ title: "Farmer Updated", description: `${data.name}'s record has been updated.` });
+    } else {
+      // Add mode
+      const newFarmer: Farmer = {
+        id: `FARM${Date.now()}`,
+        ...data,
+        joinDate: data.joinDate?.toISOString(),
+        createdAt: now,
+        updatedAt: now,
+      };
+      setFarmers(prev => [...prev, newFarmer].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
+      toast({ title: "Farmer Added", description: `${data.name} has been added to the system.` });
+    }
+  };
+
+  const columns = React.useMemo(() => getColumns({
+    onEdit: handleOpenEditDialog,
+  }), []);
+
   const handleExport = () => {
-    const csvHeader = "ID,Name,Region,Gender,JoinDate,FarmSize,Status\n";
+    const csvHeader = "ID,Name,Region,Gender,JoinDate,FarmSize,Status,CreatedAt,UpdatedAt\n";
     const csvRows = farmers.map(f => 
-      `${f.id},"${f.name}",${f.region || ''},${f.gender || ''},${f.joinDate || ''},${f.farmSize ?? ''},${f.status || ''}`
+      `"${f.id}","${f.name}","${f.region || ''}","${f.gender || ''}","${f.joinDate || ''}","${f.farmSize ?? ''}","${f.status || ''}","${f.createdAt}","${f.updatedAt}"`
     ).join("\n");
 
     const csvContent = csvHeader + csvRows;
@@ -65,7 +111,6 @@ export default function FarmersPage() {
       processCsv(text);
     };
     reader.readAsText(file);
-    // Reset file input value to allow re-uploading the same file
     if (event.target) {
         event.target.value = '';
     }
@@ -80,8 +125,6 @@ export default function FarmersPage() {
     
     const header = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
     const expectedHeaders = ['ID', 'Name', 'Region', 'Gender', 'JoinDate', 'FarmSize', 'Status'];
-    
-    // A simple validation to check if all expected headers are present.
     const hasAllHeaders = expectedHeaders.every(h => header.includes(h));
 
     if (!hasAllHeaders) {
@@ -93,18 +136,17 @@ export default function FarmersPage() {
     
     const newFarmers: Farmer[] = [];
     const localFailedRecords: FailedRecord[] = [];
+    const now = new Date().toISOString();
 
     rows.slice(1).forEach((rowStr, index) => {
       if (!rowStr) return;
       const rowData = rowStr.split(',');
       
-      // Validation: Farmer name is required.
       if (!rowData[nameIndex] || rowData[nameIndex].trim() === '') {
         localFailedRecords.push({ rowIndex: index + 2, rowData: rowStr, error: 'Farmer name is missing.' });
         return;
       }
       
-      // Validation: FarmSize must be a valid number if present.
       const farmSizeStr = rowData[header.indexOf('FarmSize')]?.trim();
       const farmSize = farmSizeStr ? parseFloat(farmSizeStr) : undefined;
       if (farmSizeStr && isNaN(farmSize)) {
@@ -112,7 +154,6 @@ export default function FarmersPage() {
           return;
       }
       
-      // Validation: JoinDate must be a valid date if present.
       const joinDateStr = rowData[header.indexOf('JoinDate')]?.trim();
       if (joinDateStr && isNaN(new Date(joinDateStr).getTime())) {
           localFailedRecords.push({ rowIndex: index + 2, rowData: rowStr, error: 'Invalid format for JoinDate.' });
@@ -127,13 +168,15 @@ export default function FarmersPage() {
         joinDate: joinDateStr || undefined,
         farmSize: farmSize,
         status: (rowData[header.indexOf('Status')]?.trim() as Farmer['status']) || undefined,
+        createdAt: now,
+        updatedAt: now,
       };
       
       newFarmers.push(farmer);
     });
 
     if (newFarmers.length > 0) {
-      setFarmers(prev => [...prev, ...newFarmers]);
+      setFarmers(prev => [...prev, ...newFarmers].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
     }
 
     if (localFailedRecords.length > 0) {
@@ -144,10 +187,9 @@ export default function FarmersPage() {
     toast({
       title: 'Upload Processed',
       description: `${newFarmers.length} farmers added successfully. ${localFailedRecords.length} records failed.`,
-      variant: localFailedRecords.length > 0 ? 'default' : 'default', // 'default' is fine for both cases
+      variant: localFailedRecords.length > 0 ? 'default' : 'default',
     });
   };
-
 
   return (
     <AppShell>
@@ -164,7 +206,7 @@ export default function FarmersPage() {
           <Download className="mr-2" />
           Export
         </Button>
-        <Button>
+        <Button onClick={handleOpenAddDialog}>
           <PlusCircle className="mr-2" />
           Add Farmer
         </Button>
@@ -173,7 +215,15 @@ export default function FarmersPage() {
       <div className="grid gap-6">
         <FarmerDataTable columns={columns} data={farmers} />
       </div>
+
       <UploadReportDialog open={isReportOpen} onOpenChange={setIsReportOpen} failedRecords={failedRecords} />
+      
+      <AddEditFarmerDialog 
+        open={isAddEditDialogOpen}
+        onOpenChange={setIsAddEditDialogOpen}
+        farmer={editingFarmer}
+        onSave={handleSaveFarmer}
+      />
     </AppShell>
   );
 }
