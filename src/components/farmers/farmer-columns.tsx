@@ -63,20 +63,24 @@ export const columns: ColumnDef<Farmer>[] = [
   {
     accessorKey: 'region',
     header: 'Region',
+    cell: ({ row }) => row.getValue('region') || 'N/A',
   },
   {
     accessorKey: 'joinDate',
     header: 'Join Date',
-    cell: ({ row }) => format(new Date(row.getValue('joinDate')), 'PPP'),
+    cell: ({ row }) => {
+      const joinDate = row.getValue('joinDate') as string | undefined;
+      return joinDate ? format(new Date(joinDate), 'PPP') : 'N/A';
+    },
   },
   {
     accessorKey: 'status',
     header: 'Status',
     cell: ({ row }) => {
-      const status: 'Active' | 'Inactive' = row.getValue('status');
+      const status = row.getValue('status') as 'Active' | 'Inactive' | undefined;
       return (
         <Badge variant={status === 'Active' ? 'default' : 'secondary'} className={status === 'Active' ? 'bg-primary/20 text-primary-foreground' : ''}>
-          {status}
+          {status || 'Unknown'}
         </Badge>
       );
     },
@@ -85,8 +89,8 @@ export const columns: ColumnDef<Farmer>[] = [
     accessorKey: 'farmSize',
     header: () => <div className="text-right">Farm Size (acres)</div>,
     cell: ({ row }) => {
-      const amount = parseFloat(row.getValue('farmSize'));
-      return <div className="text-right font-medium">{amount}</div>;
+      const amount = row.getValue('farmSize') as number | undefined;
+      return <div className="text-right font-medium">{amount ?? 'N/A'}</div>;
     },
   },
   {

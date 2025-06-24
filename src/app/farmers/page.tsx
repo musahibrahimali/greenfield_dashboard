@@ -18,7 +18,7 @@ export default function FarmersPage() {
   const handleExport = () => {
     const csvHeader = "ID,Name,Region,Gender,JoinDate,FarmSize,Status\n";
     const csvRows = farmers.map(f => 
-      `${f.id},"${f.name}",${f.region},${f.gender},${f.joinDate},${f.farmSize},${f.status}`
+      `${f.id},"${f.name}",${f.region || ''},${f.gender || ''},${f.joinDate || ''},${f.farmSize ?? ''},${f.status || ''}`
     ).join("\n");
 
     const csvContent = csvHeader + csvRows;
